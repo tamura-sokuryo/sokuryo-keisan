@@ -145,55 +145,139 @@ function calcPerpPoint(id){
       ah=Math.hypot(hx-ax,hy-ay),
       bh=Math.hypot(hx-bx,hy-by),
       cross=vx*(py-ay)-vy*(px-ax);
-  let sideText=Math.abs(cross)<1e-12?'基準線上':(cross>0?'右':'左');
 
-  // HがAB線分の外にある場合も、図はHを中心に拡大して表示する。
-  // A・Bの実位置が画面外になる場合は、A/Bと省略記号で「一部省略」を明示する。
-  let uA=-t*L, uB=(1-t)*L;
-  let W=600,H=600,pad=45;
-  // P-H間の表示長を直接指定。
-  // 基本10倍、1m以下15倍、30cm以下20倍、15cm以下30倍。
-  let phPx = d<=0.01 ? Math.max(20, Math.min(40, d*4000)) : d<=0.15 ? 360 : d<=0.30 ? 240 : d<=1.00 ? 180 : 120;
-  let scale = phPx / Math.max(d,1e-9);
-  let OX=W/2, OY=390;
-  let sx=u=>OX+u*scale, sy=v=>OY-v*scale;
-  let HH={x:OX,y:OY}, PP={x:OX,y:OY-d*scale};
-  let mark=Math.min(28,Math.max(12,d*scale*.45));
-  let r1={x:sx(mark/scale),y:sy(0)},r2={x:sx(mark/scale),y:sy(mark/scale)},r3={x:sx(0),y:sy(mark/scale)};
+  // 測量座標は X+ が上、Y+ が右。
+  // A→B に対する左右は、測量座標系に合わせて cross の符号を反転して判定する。
+  let sideCross=-cross;
+  let sideText=Math.abs(sideCross)<1e-12?'基準線上':(sideCross>0?'左':'右');
 
-  // Hを中心に拡大するとA/Bが画面外へ出ることがある。
-  // A/Bの左右関係を崩さず、画面外の場合は「…」で一部省略を明示する。
-  let leftPx=55, rightPx=545;
-  let aPx=sx(uA), bPx=sx(uB);
-  let segX1,segX2,extLeft='',extRight='',leftText='',rightText='',leftLabel='',rightLabel='';
-  const bothLeft = aPx < leftPx && bPx < leftPx;
-  const bothRight = aPx > rightPx && bPx > rightPx;
-  const leftIsA = aPx <= bPx;
+  // ─────────────────────────────────────────────
+  // 垂線図：V36までの「H周辺を拡大」の考え方を維持しつつ、
+  // ABを実際の測量座標(X+上・Y+右)の方向に回転して描画する。
+  // ─────────────────────────────────────────────
+  const W=620,H=600;
+  const OX=310, OY=390;
 
-  if(bothLeft){
-    // A … B ┄┄┄┄ H
-    segX1=65; segX2=175;
-    leftLabel='A'; rightLabel='B';
-    leftText='A …'; rightText='… B';
-    extRight=`<line x1="${segX2}" y1="${OY}" x2="${OX}" y2="${OY}" stroke="#17324d" stroke-width="4" stroke-dasharray="8 7"/>`;
-  }else if(bothRight){
-    // H ┄┄┄┄ A … B
-    segX1=425; segX2=535;
-    leftLabel='A'; rightLabel='B';
-    leftText='A …'; rightText='… B';
-    extLeft=`<line x1="${OX}" y1="${OY}" x2="${segX1}" y2="${OY}" stroke="#17324d" stroke-width="4" stroke-dasharray="8 7"/>`;
-  }else{
-    let leftEnd=Math.max(leftPx,Math.min(rightPx,aPx));
-    let rightEnd=Math.max(leftPx,Math.min(rightPx,bPx));
-    segX1=Math.min(leftEnd,rightEnd); segX2=Math.max(leftEnd,rightEnd);
-    leftLabel=leftIsA?'A':'B'; rightLabel=leftIsA?'B':'A';
-    let aVisible=aPx>=leftPx&&aPx<=rightPx, bVisible=bPx>=leftPx&&bPx<=rightPx;
-    let leftOutside=leftIsA?!aVisible:!bVisible, rightOutside=leftIsA?!bVisible:!aVisible;
-    leftText=leftOutside?`⋯ ${leftLabel}`:leftLabel;
-    rightText=rightOutside?`${rightLabel} ⋯`:rightLabel;
-    extLeft = leftOutside ? `<line x1="55" y1="${OY}" x2="${leftEnd}" y2="${OY}" stroke="#17324d" stroke-width="4" stroke-dasharray="8 7"/>` : '';
-    extRight = rightOutside ? `<line x1="${rightEnd}" y1="${OY}" x2="545" y2="${OY}" stroke="#17324d" stroke-width="4" stroke-dasharray="8 7"/>` : '';
+  // 過去版と同じ拡大ルール：PHをH周辺で十分見える大きさにする。
+  let phPx = d<=0.01 ? Math.max(20, Math.min(40, d*4000))
+           : d<=0.15 ? 360
+           : d<=0.30 ? 240
+           : d<=1.00 ? 180
+           : 120;
+  let scale=phPx/Math.max(d,1e-9);
+
+  // 画面座標への変換：Y→左右、X→上下(X+は上)。
+  const Hpt={x:OX,y:OY};
+  const Ppt={x:OX+(py-hy)*scale, y:OY-(px-hx)*scale};
+
+  // A→B方向の画面上単位ベクトル。
+  const ux=(vy/L), uy=(-vx/L);
+  // Hから見たA/Bの距離（A→B方向を正とする）。
+  const sA=-t*L, sB=(1-t)*L;
+  const pointAtS=(s)=>({x:OX+ux*s*scale,y:OY+uy*s*scale});
+
+  // Hを中心に拡大するとA/Bが画面外になるので、
+  // AB線の見えている部分を「A－B間＝実線、延長＝点線」として分けて描く。
+  // これにより、HがABの内側でも外側でもA/Bの位置関係を失わない。
+  const xmin=32,xmax=W-32,ymin=86,ymax=H-46;
+
+  // 画面矩形と、無限直線 H + u*s との交差範囲をsで求める。
+  function clipS(){
+    let lo=-Infinity, hi=Infinity;
+    const comps=[
+      [OX,ux,xmin,xmax],
+      [OY,uy,ymin,ymax]
+    ];
+    for(const [o,du,minv,maxv] of comps){
+      if(Math.abs(du)<1e-12){
+        if(o<minv || o>maxv)return null;
+      }else{
+        let a=(minv-o)/du, b=(maxv-o)/du;
+        if(a>b)[a,b]=[b,a];
+        lo=Math.max(lo,a); hi=Math.min(hi,b);
+      }
+    }
+    return lo<=hi?[lo,hi]:null;
   }
+  const sc=clipS();
+  let svgParts=[];
+  if(sc){
+    const [sMin,sMax]=sc;
+    function seg(a,b,style){
+      const lo=Math.max(Math.min(a,b),sMin), hi=Math.min(Math.max(a,b),sMax);
+      if(hi<lo)return '';
+      const p1=pointAtS(lo), p2=pointAtS(hi);
+      return `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" ${style}/>`;
+    }
+    const abLo=Math.min(sA,sB), abHi=Math.max(sA,sB);
+    const solid='stroke="#17324d" stroke-width="4"';
+    const dash='stroke="#17324d" stroke-width="4" stroke-dasharray="8 7"';
+    svgParts.push(seg(sMin,abLo,dash));
+    svgParts.push(seg(abLo,abHi,solid));
+    svgParts.push(seg(abHi,sMax,dash));
+
+    // A/Bラベル：実点が画面外なら、画面端側に「A …」「… B」と表示。
+    function labelFor(name,sVal,otherS){
+      let visible=sVal>=sMin && sVal<=sMax;
+      let ss=visible?sVal:Math.max(sMin+18,Math.min(sMax-18,sVal));
+      const p=pointAtS(ss);
+      // 線から少し離して配置。AとBは反対側に逃がして重なりを防ぐ。
+      const side = sVal===Math.min(sA,sB) ? -1 : 1;
+      const nx=-uy*side*13, ny=ux*side*13;
+      const tx=Math.max(6,Math.min(W-6,p.x+nx));
+      const ty=Math.max(92,Math.min(H-10,p.y+ny));
+      const text=visible?name:(sVal<0?`${name} …`:`… ${name}`);
+      const width=text.length*10+10;
+      const anchor=tx<70?'start':tx>W-70?'end':'middle';
+      const rectX=anchor==='start'?tx-4:anchor==='end'?tx-width+4:tx-width/2;
+      return `<g><rect x="${rectX}" y="${ty-17}" width="${width}" height="22" rx="4" fill="#fff" fill-opacity="0.92"/>
+        <text x="${tx}" y="${ty}" font-size="16" font-weight="700" text-anchor="${anchor}" fill="#17324d">${text}</text></g>`;
+    }
+    svgParts.push(labelFor('A',sA,sB));
+    svgParts.push(labelFor('B',sB,sA));
+  }
+
+  // PH
+  if(d>1e-12){
+    svgParts.push(`<line x1="${Ppt.x}" y1="${Ppt.y}" x2="${Hpt.x}" y2="${Hpt.y}" stroke="#d22" stroke-width="6"/>`);
+  }
+
+  // 直角記号：AB方向uとPH方向pを使って実座標どおりに配置。
+  let pux=0,puy=-1;
+  if(d>1e-12){
+    const plen=Math.hypot(Ppt.x-Hpt.x,Ppt.y-Hpt.y)||1;
+    pux=(Ppt.x-Hpt.x)/plen; puy=(Ppt.y-Hpt.y)/plen;
+  }
+  const mark=Math.min(28,Math.max(12,d*scale*.45));
+  const q0={x:OX+ux*mark,y:OY+uy*mark};
+  const q1={x:q0.x+pux*mark,y:q0.y+puy*mark};
+  const q2={x:OX+pux*mark,y:OY+puy*mark};
+
+  svgParts.push(`<circle cx="${Hpt.x}" cy="${Hpt.y}" r="7" fill="#17324d"/>`);
+  if(d>1e-12)svgParts.push(`<circle cx="${Ppt.x}" cy="${Ppt.y}" r="7" fill="#d22"/>`);
+  if(d>1e-12)svgParts.push(`<polyline points="${q0.x},${q0.y} ${q1.x},${q1.y} ${q2.x},${q2.y}" fill="none" stroke="#06c" stroke-width="3"/>`);
+
+  // P / Hラベルは互いに反対側へ逃がして重なりを防止。
+  if(d>1e-12){
+    const pxOff=12, pyOff=12;
+    const pLabelX=Math.max(8,Math.min(W-8,Ppt.x+pxOff));
+    const pLabelY=Math.max(96,Math.min(H-8,Ppt.y-pyOff));
+    const hLabelX=Math.max(8,Math.min(W-8,Hpt.x+pxOff));
+    const hLabelY=Math.max(96,Math.min(H-8,Hpt.y+20));
+    svgParts.push(`<g><rect x="${pLabelX-3}" y="${pLabelY-18}" width="36" height="23" rx="4" fill="#fff" fill-opacity="0.92"/><text x="${pLabelX}" y="${pLabelY}" font-size="17" font-weight="700" fill="#d22">P${id}</text></g>`);
+    svgParts.push(`<g><rect x="${hLabelX-3}" y="${hLabelY-17}" width="24" height="22" rx="4" fill="#fff" fill-opacity="0.92"/><text x="${hLabelX}" y="${hLabelY}" font-size="17" font-weight="700" fill="#17324d">H</text></g>`);
+  }else{
+    svgParts.push(`<text x="${OX+12}" y="${OY-12}" font-size="17" font-weight="700" fill="#17324d">H</text>`);
+  }
+
+  // 座標方向表示。図中の実座標配置を邪魔しないよう右上に固定。
+  const axisX=W-108, axisY=56;
+  svgParts.push(`<rect x="${axisX-18}" y="${axisY-30}" width="102" height="64" rx="8" fill="#fff" fill-opacity="0.94" stroke="#ddd"/>`);
+  svgParts.push(`<defs><marker id="perpAxisArrow${id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#555"/></marker></defs>`);
+  svgParts.push(`<line x1="${axisX+15}" y1="${axisY+20}" x2="${axisX+15}" y2="${axisY-12}" stroke="#555" stroke-width="1.5" marker-end="url(#perpAxisArrow${id})"/>`);
+  svgParts.push(`<line x1="${axisX+15}" y1="${axisY+20}" x2="${axisX+51}" y2="${axisY+20}" stroke="#555" stroke-width="1.5" marker-end="url(#perpAxisArrow${id})"/>`);
+  svgParts.push(`<text x="${axisX+3}" y="${axisY-14}" font-size="13">X＋</text>`);
+  svgParts.push(`<text x="${axisX+55}" y="${axisY+25}" font-size="13">Y＋</text>`);
 
   $('pr'+id).style.display='inline-block';
   $('pa'+id).style.display='inline-block';
@@ -202,27 +286,19 @@ function calcPerpPoint(id){
     垂線距離　<span class="big">${fmt(d)} m</span><br>
     A－B間距離（線分）：${fmt(L)} m<br>
     ${t>1 ? `A→H：${fmt(L)}＋${fmt(bh)}＝${fmt(ah)} m（AB線分＋BH）` : t<0 ? `H→A：${fmt(ah)} m（Aの外側）` : `A→H：${fmt(ah)} m`}<br>
-    ${t<0 ? `B→H：${fmt(L)}＋${fmt(ah)}＝${fmt(bh)} m（AB線分＋AH）` : `B→H：${fmt(bh)} m`}<br>
+    ${t<0 ? `B→H：${fmt(L)}＋${fmt(ah)}＝${fmt(bh)} m（AB線分＋AH）` : t>1 ? `B→H：${fmt(bh)} m（Bの外側）` : `B→H：${fmt(bh)} m`}<br>
     垂線足 H　X ${fmt(hx)}　Y ${fmt(hy)}
   </div>`;
 
   $('ppg'+id).innerHTML=`<div class="sketch" style="overflow:hidden;margin-top:8px">
     <div style="font-weight:700;text-align:center;margin-bottom:2px">P${id} 垂線チェック（H周辺を拡大）</div>
-    <div style="text-align:center;font-size:13px;color:#555;margin-bottom:4px">A－B間：実線 ／ A－Bの延長：点線</div>
+    <div style="text-align:center;font-size:13px;color:#555;margin-bottom:4px">縦＝X軸（＋上）／横＝Y軸（＋右）　A－B間：実線 ／ 延長：点線</div>
     <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;background:#fff">
-      <line x1="${segX1}" y1="${OY}" x2="${segX2}" y2="${OY}" stroke="#17324d" stroke-width="4"/>
-      ${extLeft}${extRight}
-      <line x1="${PP.x}" y1="${PP.y}" x2="${HH.x}" y2="${HH.y}" stroke="#d22" stroke-width="6"/>
-      <circle cx="${HH.x}" cy="${HH.y}" r="7" fill="#17324d"/>
-      <circle cx="${PP.x}" cy="${PP.y}" r="7" fill="#d22"/>
-      <polyline points="${r1.x},${r1.y} ${r2.x},${r2.y} ${r3.x},${r3.y}" fill="none" stroke="#06c" stroke-width="3"/>
-      <text x="${bothLeft?55:bothRight?425:segX1+5}" y="${OY-10}" font-size="16">${leftText}</text>
-      <text x="${bothLeft?125:bothRight?485:segX2+5}" y="${OY-10}" font-size="16">${rightText}</text>
-      <text x="${PP.x+10}" y="${PP.y-10}" font-size="17" font-weight="700">P${id}</text>
-      <text x="${HH.x+10}" y="${HH.y+22}" font-size="17" font-weight="700">H</text>
+      ${svgParts.join('')}
     </svg>
   </div>`;
 }
+
 let trav=[];
 let radialCount=0;
 function startTrav(){
