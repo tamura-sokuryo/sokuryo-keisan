@@ -19,6 +19,7 @@ button.calc{width:100%;padding:13px;border:0;border-radius:9px;background:#17324
 .result{margin-top:12px;background:#eef4f8;border-radius:9px;padding:13px;font-size:15px}.big{font-size:25px;font-weight:800}
 .row{display:flex;gap:7px;align-items:end}.row>*{flex:1}.smallbtn{flex:0 0 82px!important;padding:11px;border:0;border-radius:8px;background:#e1e6eb;font-weight:700}
 table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:7px;border-bottom:1px solid #e5e8eb;text-align:right}th:first-child,td:first-child{text-align:center}
+.num3{color:#c40000;font-weight:800;white-space:nowrap}.num5{color:#222;font-size:.74em;font-weight:500;white-space:nowrap;margin-left:4px}.num5::before{content:"（"}.num5::after{content:"）"}.big .num3{font-size:1em}.big .num5{font-size:.56em;vertical-align:middle}
 .hint{font-size:12px;color:#6b7280;line-height:1.5}.sketch{margin-top:10px;background:#fff;border:1px solid #dde3e8;border-radius:9px;padding:6px}.sketch svg{width:100%;height:auto}.danger{background:#fff0f0!important;color:#a22!important}
 </style>
 </head>
@@ -94,9 +95,16 @@ const $=id=>document.getElementById(id);
 function tab(id,b){document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));$(id).classList.add('on');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));b.classList.add('on')}
 function n(id){return parseFloat($(id).value)}
 function fmt(x){return Number(x).toFixed(5)}
+function round3(x){if(!Number.isFinite(x))return NaN;const s=x<0?-1:1;return s*(Math.round((Math.abs(x)+1e-10)*1000)/1000)}
+function trunc3(x){if(!Number.isFinite(x))return NaN;const s=x<0?-1:1;return s*(Math.floor((Math.abs(x)+1e-10)*1000)/1000)}
+function coord3(x){let v=round3(x);if(Object.is(v,-0))v=0;return Number(v).toFixed(3)}
+function dim3(x){let v=trunc3(x);if(Object.is(v,-0))v=0;return Number(v).toFixed(3)}
+function coordHtml(x){return `<span class="num3">${coord3(x)}</span><span class="num5">${fmt(x)}</span>`}
+function dimHtml(x){return `<span class="num3">${dim3(x)}</span><span class="num5">${fmt(x)}</span>`}
+function svgDim(x){return `<tspan fill="#c40000" font-size="12" font-weight="700">${dim3(x)} m</tspan><tspan fill="#222" font-size="8" dx="3">(${fmt(x)})</tspan>`}
 function angle(s){if(typeof s==='number')s=String(s);s=String(s).trim();if(!s)return NaN; if(/[°′'″"]/.test(s)){let m=s.match(/([\d.]+)\s*°?\s*(?:([\d.]+)\s*[′']?)?\s*(?:([\d.]+)\s*[″"]?)?/);if(m){let D=+m[1],M=+(m[2]||0),S=+(m[3]||0);if(M>=60||S>=60)return NaN;return D+M/60+S/3600}} let v=parseFloat(s);if(!Number.isFinite(v))return NaN; if(s.includes('.')){let parts=s.split('.');let D=+parts[0];let packed=(parts[1]||'').padEnd(4,'0').slice(0,4);let M=+(packed.slice(0,2)||0),S=+(packed.slice(2,4)||0);if(M>=60||S>=60)return NaN;return D+M/60+S/3600} return v}
 function degstr(d){d=((d%360)+360)%360;let D=Math.floor(d),m=(d-D)*60,M=Math.floor(m),S=(m-M)*60;return `${D}°${String(M).padStart(2,'0')}′${S.toFixed(2).padStart(5,'0')}″`}
-function distance(){let x=n('dx2')-n('dx1'),y=n('dy2')-n('dy1'),r=Math.hypot(x,y),a=Math.atan2(y,x)*180/Math.PI; a=(a+360)%360; $('dres').innerHTML=`<div class=result>ΔX <b>${fmt(x)}</b>　ΔY <b>${fmt(y)}</b><br><span class=big>${fmt(r)} m</span><br>方向角　${degstr(a)}</div><div class="sketch"><svg viewBox="0 0 360 210"><line x1="45" y1="170" x2="315" y2="170" stroke="#aaa"/><line x1="45" y1="170" x2="315" y2="55" stroke="#17324d" stroke-width="3"/><circle cx="45" cy="170" r="6" fill="#17324d"/><circle cx="315" cy="55" r="6" fill="#17324d"/><text x="30" y="195">P1</text><text x="320" y="55">P2</text><text x="145" y="95">${fmt(r)} m</text></svg></div>`}
+function distance(){let x=n('dx2')-n('dx1'),y=n('dy2')-n('dy1'),r=Math.hypot(x,y),a=Math.atan2(y,x)*180/Math.PI; a=(a+360)%360; $('dres').innerHTML=`<div class=result>ΔX ${coordHtml(x)}　ΔY ${coordHtml(y)}<br><span class=big>${dimHtml(r)} m</span><br>方向角　${degstr(a)}</div><div class="sketch"><svg viewBox="0 0 360 210"><line x1="45" y1="170" x2="315" y2="170" stroke="#aaa"/><line x1="45" y1="170" x2="315" y2="55" stroke="#17324d" stroke-width="3"/><circle cx="45" cy="170" r="6" fill="#17324d"/><circle cx="315" cy="55" r="6" fill="#17324d"/><text x="30" y="195">P1</text><text x="320" y="55">P2</text><text x="145" y="95">${svgDim(r)}</text></svg></div>`}
 let perpBase=null, perpCount=0;
 
 function startPerp(){
@@ -298,11 +306,11 @@ function calcPerpPoint(id){
   $('pa'+id).style.display='inline-block';
   $('ppr'+id).innerHTML=`<div class="result">
     <strong>基準線 A→B を見て：<span class="big">${sideText}</span></strong><br>
-    垂線距離　<span class="big">${fmt(d)} m</span><br>
-    A－B間距離（線分）：${fmt(L)} m<br>
-    ${t>1 ? `A→H：${fmt(L)}＋${fmt(bh)}＝${fmt(ah)} m（AB線分＋BH）` : t<0 ? `H→A：${fmt(ah)} m（Aの外側）` : `A→H：${fmt(ah)} m`}<br>
-    ${t<0 ? `B→H：${fmt(L)}＋${fmt(ah)}＝${fmt(bh)} m（AB線分＋AH）` : t>1 ? `B→H：${fmt(bh)} m（Bの外側）` : `B→H：${fmt(bh)} m`}<br>
-    垂線足 H　X ${fmt(hx)}　Y ${fmt(hy)}
+    垂線距離　<span class="big">${dimHtml(d)} m</span><br>
+    A－B間距離（線分）：${dimHtml(L)} m<br>
+    ${t>1 ? `A→H：${dimHtml(L)}＋${dimHtml(bh)}＝${dimHtml(ah)} m（AB線分＋BH）` : t<0 ? `H→A：${dimHtml(ah)} m（Aの外側）` : `A→H：${dimHtml(ah)} m`}<br>
+    ${t<0 ? `B→H：${dimHtml(L)}＋${dimHtml(ah)}＝${dimHtml(bh)} m（AB線分＋AH）` : t>1 ? `B→H：${dimHtml(bh)} m（Bの外側）` : `B→H：${dimHtml(bh)} m`}<br>
+    垂線足 H　X ${coordHtml(hx)}　Y ${coordHtml(hy)}
   </div>`;
 
   $('ppg'+id).innerHTML=`<div class="sketch" style="overflow:hidden;margin-top:8px">
@@ -367,7 +375,7 @@ function calcRadialForm(card){
   const obj={p,role:'放射点',x,y,dist:d,ang:degstr(turn),dir:a};
   const idx=trav.findIndex(v=>v.p===p);
   if(idx>=0) trav[idx]=obj; else trav.push(obj);
-  card.querySelector('.rres').innerHTML=`<div class="result"><b>${p}</b><br><span class="big">X ${fmt(x)}</span><br><span class="big">Y ${fmt(y)}</span><br>方向角（P1→${p}）　${degstr(a)}</div>`;
+  card.querySelector('.rres').innerHTML=`<div class="result"><b>${p}</b><br><span class="big">X ${coordHtml(x)}</span><br><span class="big">Y ${coordHtml(y)}</span><br>方向角（P1→${p}）　${degstr(a)}</div>`;
   card.querySelector('.rcalc').style.display='none';
   card.querySelector('.rrecalc').style.display='inline-block';
   card.querySelector('.rnext').style.display='inline-block';
@@ -406,7 +414,7 @@ function drawSingleRadial(card,p1,p2,p){
   <line x1="${A.x}" y1="${A.y}" x2="${Q.x}" y2="${Q.y}" stroke="#17324d" stroke-width="2.5"/>
   <polyline points="${arc.join(' ')}" fill="none" stroke="#b45309" stroke-width="1.8"/>
   <line x1="${A.x+nx}" y1="${A.y+ny}" x2="${Q.x+nx}" y2="${Q.y+ny}" stroke="#999"/>
-  <text x="${(A.x+Q.x)/2+4}" y="${(A.y+Q.y)/2-5}" fill="#555" font-size="11">${fmt(p.dist)} m</text>
+  <text x="${(A.x+Q.x)/2+4}" y="${(A.y+Q.y)/2-5}" font-size="11">${svgDim(p.dist)}</text>
   <circle cx="${A.x}" cy="${A.y}" r="4" fill="#17324d"/><text x="${A.x+6}" y="${A.y-6}">P1</text>
   <circle cx="${B.x}" cy="${B.y}" r="4" fill="#17324d"/><text x="${B.x+6}" y="${B.y-6}">P2</text>
   <circle cx="${Q.x}" cy="${Q.y}" r="4" fill="#17324d"/><text x="${Q.x+6}" y="${Q.y-6}">${p.p}</text>
@@ -431,7 +439,7 @@ function renderTravSummary(){
         return;
       }
       box.innerHTML='<h3>計算結果</h3><div class="table-wrap"><table><thead><tr><th>点名</th><th>X</th><th>Y</th><th>夾角</th><th>方向角</th></tr></thead><tbody>'+
-        trav.map(v=>'<tr><td>'+v.p+'</td><td>'+fmt(v.x)+'</td><td>'+fmt(v.y)+'</td><td>'+((v.ang!=null)?v.ang:'—')+'</td><td>'+((v.dir!=null)?degstr(v.dir):'—')+'</td></tr>').join('')+
+        trav.map(v=>'<tr><td>'+v.p+'</td><td>'+coordHtml(v.x)+'</td><td>'+coordHtml(v.y)+'</td><td>'+((v.ang!=null)?v.ang:'—')+'</td><td>'+((v.dir!=null)?degstr(v.dir):'—')+'</td></tr>').join('')+
         '</tbody></table></div>';
     }
 function resetTrav(){
@@ -559,9 +567,9 @@ function calcContinuousForm(card, cascade=true){
   card.querySelector('.cres2').innerHTML=
     '<div class="result"><b>'+point.p+'</b><br>'+
     '器械点 '+stationName+'　後視点 '+backsightName+
-    '<br><span class="big">X = '+fmt(x)+'</span>'+
-    '<br><span class="big">Y = '+fmt(y)+'</span>'+
-    '<br>方向角 = '+degstr(dir)+'　内角 = '+degstr(turn)+'　距離 = '+fmt(d)+' m</div>';
+    '<br><span class="big">X = '+coordHtml(x)+'</span>'+
+    '<br><span class="big">Y = '+coordHtml(y)+'</span>'+
+    '<br>方向角 = '+degstr(dir)+'　内角 = '+degstr(turn)+'　距離 = '+dimHtml(d)+' m</div>';
 
   const rb=card.querySelector('.ccalc');
   const rr=card.querySelector('.crecalc');
@@ -677,9 +685,9 @@ function renderContinuousSummary(){
   }
 
   const rows=continuous.map(v=>{
-    return '<tr><td>'+v.p+'</td><td>'+v.role+'</td><td>'+fmt(v.x)+'</td><td>'+fmt(v.y)+'</td>'+
+    return '<tr><td>'+v.p+'</td><td>'+v.role+'</td><td>'+coordHtml(v.x)+'</td><td>'+coordHtml(v.y)+'</td>'+
       '<td>'+(v.angle!=null?degstr(v.angle):'—')+'</td>'+
-      '<td>'+(v.distance!=null?fmt(v.distance):'—')+'</td>'+
+      '<td>'+(v.distance!=null?dimHtml(v.distance):'—')+'</td>'+
       '<td>'+(v.dir!=null?degstr(v.dir):'—')+'</td></tr>';
   }).join('');
 
