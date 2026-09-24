@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>測量計算ミニ</title>
+<style>
+*{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#f5f6f8;color:#202124}
+header{background:#17324d;color:white;padding:18px 16px;font-weight:700;font-size:20px}
+nav{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px;background:white;position:sticky;top:0;z-index:2}
+nav button{border:0;background:#e9edf1;border-radius:9px;padding:11px 3px;font-weight:700;font-size:13px}
+nav button.on{background:#17324d;color:#fff}
+footer{text-align:center;color:#66717d;font-size:12px;padding:24px 12px 28px}
+main{padding:12px;max-width:600px;margin:auto}.panel{display:none}.panel.on{display:block}
+.card{background:#fff;border-radius:12px;padding:15px;margin-bottom:12px;box-shadow:0 1px 4px #0001}
+h2{font-size:18px;margin:0 0 14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{font-size:12px;color:#66717d;font-weight:700} input{width:100%;padding:12px 9px;border:1px solid #ccd3da;border-radius:8px;font-size:17px;margin-top:4px}
+button.calc{width:100%;padding:13px;border:0;border-radius:9px;background:#17324d;color:white;font-weight:700;font-size:16px;margin-top:12px}
+.result{margin-top:12px;background:#eef4f8;border-radius:9px;padding:13px;font-size:15px}.big{font-size:25px;font-weight:800}
+.row{display:flex;gap:7px;align-items:end}.row>*{flex:1}.smallbtn{flex:0 0 82px!important;padding:11px;border:0;border-radius:8px;background:#e1e6eb;font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:7px;border-bottom:1px solid #e5e8eb;text-align:right}th:first-child,td:first-child{text-align:center}
+.hint{font-size:12px;color:#6b7280;line-height:1.5}.sketch{margin-top:10px;background:#fff;border:1px solid #dde3e8;border-radius:9px;padding:6px}.sketch svg{width:100%;height:auto}.danger{background:#fff0f0!important;color:#a22!important}
+</style>
+</head>
+<body>
+<header>測量計算ミニ</header>
+<nav>
+<button class="on" onclick="tab('dist',this)">2点間</button>
+<button onclick="tab('perp',this)">垂線</button>
+<button onclick="tab('trav',this)">トラバース放射</button>
+<button onclick="tab('coord',this)">トラバース連続</button>
+</nav>
+<main>
+<section id="dist" class="panel on">
+<div class="card"><h2>2点間距離・方向角</h2>
+<div class="grid">
+<label>P1 X<input id="dx1" type="number" step="any"></label><label>P1 Y<input id="dy1" type="number" step="any"></label>
+<label>P2 X<input id="dx2" type="number" step="any"></label><label>P2 Y<input id="dy2" type="number" step="any"></label>
+</div><button class="calc" onclick="distance()">計算</button><button class="calc" onclick="distance()">再計算</button><div id="dres"></div></div></section>
+
+<section id="perp" class="panel">
+<div class="card"><h2>P点からABへの垂線</h2>
+<div class="grid">
+<label>A X<input id="ax" type="number" step="any"></label><label>A Y<input id="ay" type="number" step="any"></label>
+<label>B X<input id="bx" type="number" step="any"></label><label>B Y<input id="by" type="number" step="any"></label>
+</div>
+<button class="calc" onclick="startPerp()">基準線を設定</button>
+</div>
+<div class="card" id="pentry" style="display:none">
+<h2>垂線点を計算</h2>
+<div id="pperpforms"></div>
+</div>
+</section>
+
+<section id="trav" class="panel">
+<div class="card"><h2>トラバース放射</h2>
+<p class="hint">P1を器械点、P2を後視点として固定します。P1からP2を後視し、P1を中心に後視方向からの「内角」と「距離」からP3、P4、P5…を放射状に求めます。追加する点でも<strong>器械点P1・後視点P2は変わりません</strong>。閉合計算・補正は行いません。</p>
+<div class="grid">
+<label>P1（器械点）X<input id="tx1" type="number" step="any"></label><label>P1（器械点）Y<input id="ty1" type="number" step="any"></label>
+<label>P2（後視）X<input id="tx2" type="number" step="any"></label><label>P2（後視）Y<input id="ty2" type="number" step="any"></label>
+</div>
+<button class="calc" onclick="startTrav()">器械点・後視を設定</button>
+</div>
+<div class="card" id="tentry" style="display:none">
+<div id="travForms"></div>
+</div>
+<div class="card" id="tlist" style="display:none">
+<div id="travSummary"></div>
+<button class="calc danger" onclick="resetTrav()">クリア</button>
+</div>
+</section>
+
+<section id="coord" class="panel">
+<div class="card"><h2>トラバース連続</h2>
+<p class="hint">P1を最初の器械点、P2を最初の後視点として設定します。P3以降は、1つ前の点へ器械点を移し、その1つ前の器械点を後視して順次計算します。図はP2→P1→P3→P4→P5…の順に結びます。閉合計算・補正は行いません。</p>
+<div class="grid">
+<label>P1（器械点）X<input id="cx1" type="number" step="any"></label><label>P1（器械点）Y<input id="cy1" type="number" step="any"></label>
+<label>P2（後視）X<input id="cx2" type="number" step="any"></label><label>P2（後視）Y<input id="cy2" type="number" step="any"></label>
+</div>
+<button class="calc" onclick="startContinuous()">器械点・後視を設定</button>
+</div>
+<div class="card" id="centry" style="display:none">
+<div id="continuousForms"></div>
+</div>
+<div class="card" id="clist" style="display:none">
+<div id="continuousSummary"></div>
+<button class="calc danger" onclick="resetContinuous()">クリア</button>
+</div>
+</section>
+</main>
+<footer>田村測量事務所</footer>
+<script>
+const $=id=>document.getElementById(id);
+function tab(id,b){document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));$(id).classList.add('on');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));b.classList.add('on')}
+function n(id){return parseFloat($(id).value)}
+function fmt(x){return Number(x).toFixed(5)}
+function angle(s){if(typeof s==='number')s=String(s);s=String(s).trim();if(!s)return NaN; if(/[°′'″"]/.test(s)){let m=s.match(/([\d.]+)\s*°?\s*(?:([\d.]+)\s*[′']?)?\s*(?:([\d.]+)\s*[″"]?)?/);if(m){let D=+m[1],M=+(m[2]||0),S=+(m[3]||0);if(M>=60||S>=60)return NaN;return D+M/60+S/3600}} let v=parseFloat(s);if(!Number.isFinite(v))return NaN; if(s.includes('.')){let parts=s.split('.');let D=+parts[0];let packed=(parts[1]||'').padEnd(4,'0').slice(0,4);let M=+(packed.slice(0,2)||0),S=+(packed.slice(2,4)||0);if(M>=60||S>=60)return NaN;return D+M/60+S/3600} return v}
+function degstr(d){d=((d%360)+360)%360;let D=Math.floor(d),m=(d-D)*60,M=Math.floor(m),S=(m-M)*60;return `${D}°${String(M).padStart(2,'0')}′${S.toFixed(2).padStart(5,'0')}″`}
+function distance(){let x=n('dx2')-n('dx1'),y=n('dy2')-n('dy1'),r=Math.hypot(x,y),a=Math.atan2(y,x)*180/Math.PI; a=(a+360)%360; $('dres').innerHTML=`<div class=result>ΔX <b>${fmt(x)}</b>　ΔY <b>${fmt(y)}</b><br><span class=big>${fmt(r)} m</span><br>方向角　${degstr(a)}</div><div class="sketch"><svg viewBox="0 0 360 210"><line x1="45" y1="170" x2="315" y2="170" stroke="#aaa"/><line x1="45" y1="170" x2="315" y2="55" stroke="#17324d" stroke-width="3"/><circle cx="45" cy="170" r="6" fill="#17324d"/><circle cx="315" cy="55" r="6" fill="#17324d"/><text x="30" y="195">P1</text><text x="320" y="55">P2</text><text x="145" y="95">${fmt(r)} m</text></svg></div>`}
+let perpBase=null, perpCount=0;
+
+function startPerp(){
+  let ax=n('ax'),ay=n('ay'),bx=n('bx'),by=n('by');
+  if(![ax,ay,bx,by].every(Number.isFinite)){ $('pentry').style.display='none'; return; }
+  if(Math.hypot(bx-ax,by-ay)===0){ $('pentry').style.display='none'; return; }
+  perpBase={ax,ay,bx,by};
+  perpCount=0;
+  $('pperpforms').innerHTML='';
+  $('pentry').style.display='block';
+  addPerpPoint();
+}
+
+function addPerpPoint(){
+  perpCount++;
+  const id=perpCount;
+  const div=document.createElement('div');
+  div.className='card';
+  div.style.marginTop='12px';
+  div.innerHTML=`
+    <h3>P${id} 垂線計算</h3>
+    <div class="grid">
+      <label>P${id} X<input id="ppx${id}" type="number" step="any"></label>
+      <label>P${id} Y<input id="ppy${id}" type="number" step="any"></label>
+    </div>
+    <button class="calc" onclick="calcPerpPoint(${id})">計算</button>
+    <button class="calc" id="pr${id}" onclick="calcPerpPoint(${id})" style="display:none">再計算</button>
+    <div id="ppr${id}"></div>
+    <div id="ppg${id}"></div>
+    <button class="calc" id="pa${id}" onclick="addPerpPoint()" style="display:none">次の点を追加</button>`;
+  $('pperpforms').appendChild(div);
+}
+
+function calcPerpPoint(id){
+  if(!perpBase)return;
+  let ax=perpBase.ax,ay=perpBase.ay,bx=perpBase.bx,by=perpBase.by,
+      px=n('ppx'+id),py=n('ppy'+id);
+  if(!Number.isFinite(px)||!Number.isFinite(py)){
+    $('ppr'+id).innerHTML='<div class="result">Pの座標を入力してください。</div>';
+    return;
+  }
+  let vx=bx-ax,vy=by-ay,L=Math.hypot(vx,vy),L2=L*L;
+  let t=((px-ax)*vx+(py-ay)*vy)/L2,
+      hx=ax+t*vx,hy=ay+t*vy;
+  let d=Math.hypot(px-hx,py-hy),
+      ah=Math.hypot(hx-ax,hy-ay),
+      bh=Math.hypot(hx-bx,hy-by),
+      cross=vx*(py-ay)-vy*(px-ax);
+  let sideText=Math.abs(cross)<1e-12?'基準線上':(cross>0?'左':'右');
+
+  // HがAB線分の外にある場合も、図はHを中心に拡大して表示する。
+  // A・Bの実位置が画面外になる場合は、A/Bと省略記号で「一部省略」を明示する。
+  let uA=-t*L, uB=(1-t)*L;
+  let W=600,H=600,pad=45;
+  // P-H間の表示長を直接指定。
+  // 基本10倍、1m以下15倍、30cm以下20倍、15cm以下30倍。
+  let phPx = d<=0.01 ? Math.max(20, Math.min(40, d*4000)) : d<=0.15 ? 360 : d<=0.30 ? 240 : d<=1.00 ? 180 : 120;
+  let scale = phPx / Math.max(d,1e-9);
+  let OX=W/2, OY=390;
+  let sx=u=>OX+u*scale, sy=v=>OY-v*scale;
+  let HH={x:OX,y:OY}, PP={x:OX,y:OY-d*scale};
+  let mark=Math.min(28,Math.max(12,d*scale*.45));
+  let r1={x:sx(mark/scale),y:sy(0)},r2={x:sx(mark/scale),y:sy(mark/scale)},r3={x:sx(0),y:sy(mark/scale)};
+
+  // Hを中心に拡大するとA/Bが画面外へ出ることがある。
+  // A/Bの左右関係を崩さず、画面外の場合は「…」で一部省略を明示する。
+  let leftPx=55, rightPx=545;
+  let aPx=sx(uA), bPx=sx(uB);
+  let segX1,segX2,extLeft='',extRight='',leftText='',rightText='',leftLabel='',rightLabel='';
+  const bothLeft = aPx < leftPx && bPx < leftPx;
+  const bothRight = aPx > rightPx && bPx > rightPx;
+  const leftIsA = aPx <= bPx;
+
+  if(bothLeft){
+    // A … B ┄┄┄┄ H
+    segX1=65; segX2=175;
+    leftLabel='A'; rightLabel='B';
+    leftText='A …'; rightText='… B';
+    extRight=`<line x1="${segX2}" y1="${OY}" x2="${OX}" y2="${OY}" stroke="#17324d" stroke-width="4" stroke-dasharray="8 7"/>`;
+  }else if(bothRight){
+    // H ┄┄┄┄ A … B
+    segX1=425; segX2=535;
+    leftLabel='A'; rightLabel='B';
+    leftText='A …'; rightText='… B';
+    extLeft=`<line x1="${OX}" y1="${OY}" x2="${segX1}" y2="${OY}" stroke="#17324d" stroke-width="4" stroke-dasharray="8 7"/>`;
+  }else{
+    let leftEnd=Math.max(leftPx,Math.min(rightPx,aPx));
+    let rightEnd=Math.max(leftPx,Math.min(rightPx,bPx));
+    segX1=Math.min(leftEnd,rightEnd); segX2=Math.max(leftEnd,rightEnd);
+    leftLabel=leftIsA?'A':'B'; rightLabel=leftIsA?'B':'A';
+    let aVisible=aPx>=leftPx&&aPx<=rightPx, bVisible=bPx>=leftPx&&bPx<=rightPx;
+    let leftOutside=leftIsA?!aVisible:!bVisible, rightOutside=leftIsA?!bVisible:!aVisible;
+    leftText=leftOutside?`⋯ ${leftLabel}`:leftLabel;
+    rightText=rightOutside?`${rightLabel} ⋯`:rightLabel;
+    extLeft = leftOutside ? `<line x1="55" y1="${OY}" x2="${leftEnd}" y2="${OY}" stroke="#17324d" stroke-width="4" stroke-dasharray="8 7"/>` : '';
+    extRight = rightOutside ? `<line x1="${rightEnd}" y1="${OY}" x2="545" y2="${OY}" stroke="#17324d" stroke-width="4" stroke-dasharray="8 7"/>` : '';
+  }
+
+  $('pr'+id).style.display='inline-block';
+  $('pa'+id).style.display='inline-block';
+  $('ppr'+id).innerHTML=`<div class="result">
+    <strong>基準線 A→B を見て：<span class="big">${sideText}</span></strong><br>
+    垂線距離　<span class="big">${fmt(d)} m</span><br>
+    A－B間距離（線分）：${fmt(L)} m<br>
+    ${t>1 ? `A→H：${fmt(L)}＋${fmt(bh)}＝${fmt(ah)} m（AB線分＋BH）` : t<0 ? `H→A：${fmt(ah)} m（Aの外側）` : `A→H：${fmt(ah)} m`}<br>
+    ${t<0 ? `B→H：${fmt(L)}＋${fmt(ah)}＝${fmt(bh)} m（AB線分＋AH）` : `B→H：${fmt(bh)} m`}<br>
+    垂線足 H　X ${fmt(hx)}　Y ${fmt(hy)}
+  </div>`;
+
+  $('ppg'+id).innerHTML=`<div class="sketch" style="overflow:hidden;margin-top:8px">
+    <div style="font-weight:700;text-align:center;margin-bottom:2px">P${id} 垂線チェック（H周辺を拡大）</div>
+    <div style="text-align:center;font-size:13px;color:#555;margin-bottom:4px">A－B間：実線 ／ A－Bの延長：点線</div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;background:#fff">
+      <line x1="${segX1}" y1="${OY}" x2="${segX2}" y2="${OY}" stroke="#17324d" stroke-width="4"/>
+      ${extLeft}${extRight}
+      <line x1="${PP.x}" y1="${PP.y}" x2="${HH.x}" y2="${HH.y}" stroke="#d22" stroke-width="6"/>
+      <circle cx="${HH.x}" cy="${HH.y}" r="7" fill="#17324d"/>
+      <circle cx="${PP.x}" cy="${PP.y}" r="7" fill="#d22"/>
+      <polyline points="${r1.x},${r1.y} ${r2.x},${r2.y} ${r3.x},${r3.y}" fill="none" stroke="#06c" stroke-width="3"/>
+      <text x="${bothLeft?55:bothRight?425:segX1+5}" y="${OY-10}" font-size="16">${leftText}</text>
+      <text x="${bothLeft?125:bothRight?485:segX2+5}" y="${OY-10}" font-size="16">${rightText}</text>
+      <text x="${PP.x+10}" y="${PP.y-10}" font-size="17" font-weight="700">P${id}</text>
+      <text x="${HH.x+10}" y="${HH.y+22}" font-size="17" font-weight="700">H</text>
+    </svg>
+  </div>`;
+}
+let trav=[];
+let radialCount=0;
+function startTrav(){
+  const x1=n('tx1'),y1=n('ty1'),x2=n('tx2'),y2=n('ty2');
+  if(![x1,y1,x2,y2].every(Number.isFinite)){
+    $('travForms').innerHTML='<div class="result">P1・P2の座標を入力してください。</div>';
+    $('tentry').style.display='block'; $('tlist').style.display='none'; return;
+  }
+  if(x1===x2&&y1===y2){
+    $('travForms').innerHTML='<div class="result">P1とP2が同一点です。</div>';
+    $('tentry').style.display='block'; $('tlist').style.display='none'; return;
+  }
+  trav=[{p:'P1',role:'器械点',x:x1,y:y1},{p:'P2',role:'後視',x:x2,y:y2}];
+  radialCount=0;
+  $('tentry').style.display='block'; $('tlist').style.display='block';
+  $('travForms').innerHTML=''; $('travSummary').innerHTML='';
+  addRadialForm();
+}
+function addRadialForm(){
+  radialCount++;
+  const p='P'+(radialCount+2);
+  const card=document.createElement('div');
+  card.className='radial-form card';
+  card.innerHTML=`<h2>${p}を計算</h2>
+  <p class="hint">P1（器械点）・P2（後視点）は固定。P1→P2の後視方向を基準に、右回り（時計回り）の内角と距離から${p}を放射計算します。</p>
+  <div class="grid"><label>角度（右回り＋）<input class="ra" placeholder="90.0556"></label><label>距離(m)<input class="rd" type="number" step="any"></label></div>
+  <p class="hint">入力例：90°5′56″ → <b>90.0556</b></p>
+  <button type="button" class="calc rcalc">${p}を計算</button>
+  <button type="button" class="calc rrecalc" style="display:none">${p}を再計算</button>
+  <button type="button" class="calc rnext" style="display:none">次の点を追加</button>
+  <button type="button" class="calc danger rdelete">この点を削除</button>
+  <div class="rres"></div><div class="rfig"></div>`;
+  $('travForms').appendChild(card);
+  card.querySelector('.rcalc').onclick=()=>calcRadialForm(card);
+  card.querySelector('.rrecalc').onclick=()=>calcRadialForm(card);
+  card.querySelector('.rnext').onclick=()=>addRadialForm();
+  card.querySelector('.rdelete').onclick=()=>deleteRadialForm(card);
+}
+function calcRadialForm(card){
+  const turn=angle(card.querySelector('.ra').value);
+  const d=parseFloat(card.querySelector('.rd').value);
+  if(!Number.isFinite(turn)||!Number.isFinite(d)){
+    card.querySelector('.rres').innerHTML='<div class="result">角度と距離を入力してください。</div>'; return;
+  }
+  const inst=trav[0], backsight=trav[1];
+  const base=(Math.atan2(backsight.y-inst.y,backsight.x-inst.x)*180/Math.PI+360)%360;
+  const a=(base-turn+360)%360;
+  const r=a*Math.PI/180;
+  const x=inst.x+d*Math.cos(r), y=inst.y+d*Math.sin(r);
+  const p=card.querySelector('h2').textContent.match(/P\d+/)[0];
+  const obj={p,role:'放射点',x,y,dist:d,ang:degstr(turn),dir:a};
+  const idx=trav.findIndex(v=>v.p===p);
+  if(idx>=0) trav[idx]=obj; else trav.push(obj);
+  card.querySelector('.rres').innerHTML=`<div class="result"><b>${p}</b><br><span class="big">X ${fmt(x)}</span><br><span class="big">Y ${fmt(y)}</span><br>方向角（P1→${p}）　${degstr(a)}</div>`;
+  card.querySelector('.rcalc').style.display='none';
+  card.querySelector('.rrecalc').style.display='inline-block';
+  card.querySelector('.rnext').style.display='inline-block';
+  drawSingleRadial(card,inst,backsight,obj);
+  renderTravSummary();
+}
+function drawSingleRadial(card,p1,p2,p){
+  const pts=[p1,p2,p], xs=pts.map(v=>v.x), ys=pts.map(v=>v.y);
+  let minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);
+  let span=Math.max(maxx-minx,maxy-miny,1), W=360,H=240,pad=50;
+  const scale=Math.min((W-pad*2)/span,(H-pad*2)/span);
+  const sx=(v)=>pad+(v.x-minx)*scale;
+  const sy=(v)=>H-pad-(v.y-miny)*scale;
+  const A={x:sx(p1),y:sy(p1)},B={x:sx(p2),y:sy(p2)},Q={x:sx(p),y:sy(p)};
+  const base=Math.atan2(B.y-A.y,B.x-A.x), target=Math.atan2(Q.y-A.y,Q.x-A.x);
+  let delta=target-base; while(delta<0)delta+=Math.PI*2; while(delta>Math.PI*2)delta-=Math.PI*2;
+  const R=28, seg=Math.max(8,Math.ceil(delta*R/3));
+  const arc=[]; for(let i=0;i<=seg;i++){const aa=base+delta*i/seg;arc.push(`${A.x+R*Math.cos(aa)},${A.y+R*Math.sin(aa)}`)}
+  const dx=Q.x-A.x,dy=Q.y-A.y,L=Math.hypot(dx,dy)||1,nx=-dy/L*12,ny=dx/L*12;
+  card.querySelector('.rfig').innerHTML=`<div class="hint"><b>${p.p}の放射図</b></div><div class="sketch"><svg viewBox="0 0 360 240">
+  <line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#777" stroke-width="1.5"/>
+  <line x1="${A.x}" y1="${A.y}" x2="${Q.x}" y2="${Q.y}" stroke="#17324d" stroke-width="2.5"/>
+  <polyline points="${arc.join(' ')}" fill="none" stroke="#b45309" stroke-width="1.8"/>
+  <line x1="${A.x+nx}" y1="${A.y+ny}" x2="${Q.x+nx}" y2="${Q.y+ny}" stroke="#999"/>
+  <text x="${(A.x+Q.x)/2+4}" y="${(A.y+Q.y)/2-5}" fill="#555" font-size="11">${fmt(p.dist)} m</text>
+  <circle cx="${A.x}" cy="${A.y}" r="4" fill="#17324d"/><text x="${A.x+6}" y="${A.y-6}">P1</text>
+  <circle cx="${B.x}" cy="${B.y}" r="4" fill="#17324d"/><text x="${B.x+6}" y="${B.y-6}">P2</text>
+  <circle cx="${Q.x}" cy="${Q.y}" r="4" fill="#17324d"/><text x="${Q.x+6}" y="${Q.y-6}">${p.p}</text>
+  </svg></div>`;
+}
+function deleteRadialForm(card){
+  const m=card.querySelector('h2').textContent.match(/P\d+/);
+  if(m){
+    const target=m[0];
+    // 削除対象の点だけを削除。ほかの計算済み点（P3など）は絶対に触らない。
+    const idx=trav.findIndex(v=>v.p===target);
+    if(idx>=2) trav.splice(idx,1);
+  }
+  card.remove();
+  renderTravSummary();
+}
+function renderTravSummary(){
+      const box=$('travSummary');
+      if(!box) return;
+      if(!trav.length){
+        box.innerHTML='';
+        return;
+      }
+      box.innerHTML='<h3>計算結果</h3><div class="table-wrap"><table><thead><tr><th>点名</th><th>X</th><th>Y</th><th>内角</th><th>方向角</th></tr></thead><tbody>'+
+        trav.map(v=>'<tr><td>'+v.p+'</td><td>'+fmt(v.x)+'</td><td>'+fmt(v.y)+'</td><td>'+((v.ang!=null)?v.ang:'—')+'</td><td>'+((v.dir!=null)?degstr(v.dir):'—')+'</td></tr>').join('')+
+        '</tbody></table></div>';
+    }
+function resetTrav(){
+  trav=[]; radialCount=0; $('tentry').style.display='none'; $('tlist').style.display='none'; $('travForms').innerHTML=''; $('travSummary').innerHTML='';
+}
+
+
+let continuous=[];
+let continuousCount=0;
+
+function startContinuous(){
+  const x1=parseFloat(document.getElementById('cx1').value);
+  const y1=parseFloat(document.getElementById('cy1').value);
+  const x2=parseFloat(document.getElementById('cx2').value);
+  const y2=parseFloat(document.getElementById('cy2').value);
+  if(![x1,y1,x2,y2].every(Number.isFinite)){
+    $('continuousForms').innerHTML='<div class="result">P1・P2の座標を入力してください。</div>';
+    $('centry').style.display='block'; $('clist').style.display='none'; return;
+  }
+  if(x1===x2&&y1===y2){
+    $('continuousForms').innerHTML='<div class="result">P1とP2が同一点です。</div>';
+    $('centry').style.display='block'; $('clist').style.display='none'; return;
+  }
+  continuous=[
+    {p:'P1',role:'器械点',x:x1,y:y1},
+    {p:'P2',role:'後視',x:x2,y:y2}
+  ];
+  continuousCount=0;
+  $('centry').style.display='block'; $('clist').style.display='block';
+  $('continuousForms').innerHTML='';
+  $('continuousSummary').innerHTML='';
+  addContinuousForm();
+}
+
+function addContinuousForm(){
+  continuousCount++;
+  const p='P'+(continuousCount+2);
+
+  // P3: 器械点P1、後視P2
+  // P4: 器械点P3、後視P1
+  // P5: 器械点P4、後視P3
+  // P6: 器械点P5、後視P4 …
+  const stationName = p==='P3' ? 'P1' : 'P'+(continuousCount);
+  const backsightName = p==='P3' ? 'P2' : 'P'+(continuousCount-1);
+
+  const card=document.createElement('div');
+  card.className='radial-form card';
+  card.innerHTML=`<h2>${p}を計算</h2>
+  <p class="hint">${stationName}を器械点、${backsightName}を後視点として、後視点→器械点→計算点の角（右回り・時計回り）と距離から${p}を計算します。</p>
+  <div class="grid"><label>角度（右回り＋）<input class="ca2" placeholder="90.0556"></label><label>距離(m)<input class="cd2" type="number" step="any"></label></div>
+  <p class="hint">入力例：90°5′56″ → <b>90.0556</b></p>
+  <button type="button" class="calc ccalc">${p}を計算</button>
+  <button type="button" class="calc crecalc" style="display:none">${p}を再計算</button>
+  <button type="button" class="calc cnext" style="display:none">次の点を追加</button>
+  <button type="button" class="calc danger cdelete" style="display:none">この点を削除</button>
+  <div class="cres2"></div><div class="cfig"></div>`;
+  $('continuousForms').appendChild(card);
+  card.querySelector('.ccalc').onclick=()=>calcContinuousForm(card);
+  card.querySelector('.crecalc').onclick=()=>calcContinuousForm(card);
+  card.querySelector('.cnext').onclick=()=>addContinuousForm();
+  card.querySelector('.cdelete').onclick=()=>deleteContinuousForm(card);
+
+  // 「最終点だけ削除できる」ように、追加されたら前の点の削除ボタンを隠す。
+  updateContinuousLastButtons();
+}
+
+function calcContinuousForm(card, cascade=true){
+  const turn=angle(card.querySelector('.ca2').value);
+  const d=parseFloat(card.querySelector('.cd2').value);
+  if(!Number.isFinite(turn)||!Number.isFinite(d)){
+    card.querySelector('.cres2').innerHTML='<div class="result">角度と距離を入力してください。</div>';
+    return false;
+  }
+
+  const pnum=parseInt(card.querySelector('h2').textContent.match(/P(\d+)/)[1],10);
+
+  // 連続トラバース：
+  // P3 = P1器械点・P2後視
+  // P4 = P3器械点・P1後視
+  // P5 = P4器械点・P3後視
+  // P6 = P5器械点・P4後視 …
+  let stationName, backsightName;
+  if(pnum===3){
+    stationName='P1';
+    backsightName='P2';
+  }else if(pnum===4){
+    stationName='P3';
+    backsightName='P1';
+  }else{
+    stationName='P'+(pnum-1);
+    backsightName='P'+(pnum-2);
+  }
+
+  const st=continuous.find(v=>v.p===stationName);
+  const bs=continuous.find(v=>v.p===backsightName);
+
+  if(!st||!bs){
+    card.querySelector('.cres2').innerHTML=
+      '<div class="result">器械点・後視点の座標がありません。先に前の点を計算してください。</div>';
+    return false;
+  }
+
+  // 後視方向 → 右回り（時計回り）の内角
+  const base=(Math.atan2(bs.y-st.y,bs.x-st.x)*180/Math.PI+360)%360;
+  const dir=(base-turn+360)%360;
+  const r=dir*Math.PI/180;
+  const x=st.x+d*Math.cos(r);
+  const y=st.y+d*Math.sin(r);
+
+  const point={
+    p:'P'+pnum,
+    role:'計算点',
+    x,y,
+    dir,
+    angle:turn,
+    distance:d,
+    station:stationName,
+    backsight:backsightName
+  };
+
+  const old=continuous.findIndex(v=>v.p===point.p);
+  if(old>=0) continuous[old]=point;
+  else continuous.push(point);
+
+  card.querySelector('.cres2').innerHTML=
+    '<div class="result"><b>'+point.p+'</b><br>'+
+    '器械点 '+stationName+'　後視点 '+backsightName+
+    '<br><span class="big">X = '+fmt(x)+'</span>'+
+    '<br><span class="big">Y = '+fmt(y)+'</span>'+
+    '<br>方向角 = '+degstr(dir)+'　内角 = '+degstr(turn)+'　距離 = '+fmt(d)+' m</div>';
+
+  const rb=card.querySelector('.ccalc');
+  const rr=card.querySelector('.crecalc');
+  const nx=card.querySelector('.cnext');
+  if(rb) rb.style.display='none';
+  if(rr) rr.style.display='inline-block';
+  if(nx) nx.style.display='inline-block';
+
+  // この点を再計算したら、この点より後ろにある計算済み点も順番に再計算する。
+  // 例：P3を再計算 → P4 → P5 → … と自動更新。
+  if(cascade){
+    const cards=[...$('continuousForms').querySelectorAll('.radial-form')];
+    const index=cards.indexOf(card);
+    for(let i=index+1;i<cards.length;i++){
+      const nextCard=cards[i];
+      const hasInput=nextCard.querySelector('.ca2').value.trim()!=='' &&
+                     nextCard.querySelector('.cd2').value.trim()!=='';
+      if(hasInput){
+        calcContinuousForm(nextCard,false);
+      }
+    }
+  }
+
+  updateContinuousLastButtons();
+  renderContinuousSummary();
+  return true;
+}
+
+function updateContinuousLastButtons(){
+  const cards=[...$('continuousForms').querySelectorAll('.radial-form')];
+  cards.forEach((card,i)=>{
+    const isLast=i===cards.length-1;
+    const del=card.querySelector('.cdelete');
+    const next=card.querySelector('.cnext');
+    if(del) del.style.display=isLast ? 'inline-block' : 'none';
+    if(next && card.querySelector('.crecalc').style.display!=='none'){
+      next.style.display=isLast ? 'inline-block' : 'none';
+    }
+  });
+}
+
+function deleteContinuousForm(card){
+  const cards=[...$('continuousForms').querySelectorAll('.radial-form')];
+  if(cards.length===0 || cards[cards.length-1]!==card) return;
+
+  const m=card.querySelector('h2').textContent.match(/P(\d+)/);
+  if(m){
+    const target=m[0];
+    const idx=continuous.findIndex(v=>v.p===target);
+    if(idx>=2) continuous.splice(idx,1);
+  }
+
+  card.remove();
+  continuousCount=Math.max(0,continuousCount-1);
+  updateContinuousLastButtons();
+  renderContinuousSummary();
+}
+
+function drawContinuousFigure(){
+  const svg=$('continuousFigure');
+  if(!svg||continuous.length<2) return;
+  const pts=continuous.filter(v=>Number.isFinite(v.x)&&Number.isFinite(v.y));
+  if(pts.length<2) return;
+
+  const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y);
+  let minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
+  const pad=45, w=700, h=420;
+  const dx=maxX-minX || 1, dy=maxY-minY || 1;
+  const scale=Math.min((w-2*pad)/dx,(h-2*pad)/dy);
+  const sx=x=>pad+(x-minX)*scale;
+  const sy=y=>h-(pad+(y-minY)*scale);
+
+  let out='';
+
+  // P2→P1→P3→P4→P5…の順に結ぶ。
+  const ordered=[];
+  const firstNames=['P2','P1'];
+  for(const name of firstNames){
+    const p=pts.find(v=>v.p===name);
+    if(p) ordered.push(p);
+  }
+  const later=pts
+    .filter(p=>/^P\d+$/.test(p.p) && parseInt(p.p.slice(1),10)>=3)
+    .sort((a,b)=>parseInt(a.p.slice(1),10)-parseInt(b.p.slice(1),10));
+  ordered.push(...later);
+
+  for(let i=1;i<ordered.length;i++){
+    const a=ordered[i-1], b=ordered[i];
+    out+='<line x1="'+sx(a.x)+'" y1="'+sy(a.y)+'" x2="'+sx(b.x)+'" y2="'+sy(b.y)+'" stroke="#333" stroke-width="2"/>';
+  }
+
+  for(const p of pts){
+    const cx=sx(p.x), cy=sy(p.y);
+    out+='<circle cx="'+cx+'" cy="'+cy+'" r="5" fill="#fff" stroke="#000" stroke-width="2"/>';
+    out+='<text x="'+(cx+8)+'" y="'+(cy-8)+'" font-size="14" fill="#000">'+p.p+'</text>';
+  }
+  svg.innerHTML=out;
+}
+
+function renderContinuousSummary(){
+  const box=$('continuousSummary');
+  if(!box) return;
+  if(!continuous.length){
+    box.innerHTML='';
+    return;
+  }
+
+  const rows=continuous.map(v=>{
+    return '<tr><td>'+v.p+'</td><td>'+v.role+'</td><td>'+fmt(v.x)+'</td><td>'+fmt(v.y)+'</td>'+
+      '<td>'+(v.angle!=null?degstr(v.angle):'—')+'</td>'+
+      '<td>'+(v.distance!=null?fmt(v.distance):'—')+'</td>'+
+      '<td>'+(v.dir!=null?degstr(v.dir):'—')+'</td></tr>';
+  }).join('');
+
+  box.innerHTML=
+    '<h3>連続トラバース結果</h3>'+
+    '<div class="table-wrap"><table><thead><tr>'+
+    '<th>点</th><th>区分</th><th>X</th><th>Y</th><th>内角</th><th>距離</th><th>方向角</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div class="trav-figure-wrap">'+
+    '<h3>連続トラバース図（P2→P1→P3→P4…）</h3>'+
+    '<svg id="continuousFigure" viewBox="0 0 700 420" style="width:100%;height:auto;border:1px solid #ccc;background:#fff"></svg>'+
+    '</div>';
+
+  drawContinuousFigure();
+}
+
+function resetContinuous(){
+  continuous=[]; continuousCount=0;
+  $('centry').style.display='none'; $('clist').style.display='none';
+  $('continuousForms').innerHTML=''; $('continuousSummary').innerHTML='';
+}
+</script>
+</body></html>
