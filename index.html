@@ -247,8 +247,8 @@ function addRadialForm(){
   const card=document.createElement('div');
   card.className='radial-form card';
   card.innerHTML=`<h2>${p}を計算</h2>
-  <p class="hint">P1（器械点）・P2（後視点）は固定。P1→P2の後視方向を基準に、右回り（時計回り）の内角と距離から${p}を放射計算します。</p>
-  <div class="grid"><label>角度（右回り＋）<input class="ra" placeholder="90.0556"></label><label>距離(m)<input class="rd" type="number" step="any"></label></div>
+  <p class="hint">P1（器械点）・P2（後視点）は固定。P1→P2の後視方向を基準に、右回り（時計回り）の夾角と距離から${p}を放射計算します。</p>
+  <div class="grid"><label>夾角（右回り）<input class="ra" placeholder="90.0556"></label><label>距離(m)<input class="rd" type="number" step="any"></label></div>
   <p class="hint">入力例：90°5′56″ → <b>90.0556</b></p>
   <button type="button" class="calc rcalc">${p}を計算</button>
   <button type="button" class="calc rrecalc" style="display:none">${p}を再計算</button>
@@ -269,7 +269,7 @@ function calcRadialForm(card){
   }
   const inst=trav[0], backsight=trav[1];
   const base=(Math.atan2(backsight.y-inst.y,backsight.x-inst.x)*180/Math.PI+360)%360;
-  const a=(base-turn+360)%360;
+  const a=(base+turn)%360;
   const r=a*Math.PI/180;
   const x=inst.x+d*Math.cos(r), y=inst.y+d*Math.sin(r);
   const p=card.querySelector('h2').textContent.match(/P\d+/)[0];
@@ -286,17 +286,31 @@ function calcRadialForm(card){
 function drawSingleRadial(card,p1,p2,p){
   const pts=[p1,p2,p], xs=pts.map(v=>v.x), ys=pts.map(v=>v.y);
   let minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);
-  let span=Math.max(maxx-minx,maxy-miny,1), W=360,H=240,pad=50;
+  let span=Math.max(maxx-minx,maxy-miny,1), W=360,H=270,pad=52;
   const scale=Math.min((W-pad*2)/span,(H-pad*2)/span);
-  const sx=(v)=>pad+(v.x-minx)*scale;
-  const sy=(v)=>H-pad-(v.y-miny)*scale;
+  // 測量座標系：X+は上、Y+は右
+  const sx=(v)=>pad+(v.y-miny)*scale;
+  const sy=(v)=>H-pad-(v.x-minx)*scale;
   const A={x:sx(p1),y:sy(p1)},B={x:sx(p2),y:sy(p2)},Q={x:sx(p),y:sy(p)};
-  const base=Math.atan2(B.y-A.y,B.x-A.x), target=Math.atan2(Q.y-A.y,Q.x-A.x);
-  let delta=target-base; while(delta<0)delta+=Math.PI*2; while(delta>Math.PI*2)delta-=Math.PI*2;
-  const R=28, seg=Math.max(8,Math.ceil(delta*R/3));
-  const arc=[]; for(let i=0;i<=seg;i++){const aa=base+delta*i/seg;arc.push(`${A.x+R*Math.cos(aa)},${A.y+R*Math.sin(aa)}`)}
+  const base=Math.atan2(B.x-A.x,-(B.y-A.y));
+  const target=Math.atan2(Q.x-A.x,-(Q.y-A.y));
+  let delta=target-base;
+  while(delta<0)delta+=Math.PI*2;
+  while(delta>=Math.PI*2)delta-=Math.PI*2;
+  const R=30, seg=Math.max(12,Math.ceil(delta*R/2));
+  const arc=[];
+  for(let i=0;i<=seg;i++){
+    const aa=base+delta*i/seg;
+    arc.push(`${A.x+R*Math.sin(aa)},${A.y-R*Math.cos(aa)}`);
+  }
   const dx=Q.x-A.x,dy=Q.y-A.y,L=Math.hypot(dx,dy)||1,nx=-dy/L*12,ny=dx/L*12;
-  card.querySelector('.rfig').innerHTML=`<div class="hint"><b>${p.p}の放射図</b></div><div class="sketch"><svg viewBox="0 0 360 240">
+  const defs=`<defs><marker id="axisArrowR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#555"/></marker></defs>`;
+  card.querySelector('.rfig').innerHTML=`<div class="hint"><b>${p.p}の放射図</b></div><div class="sketch"><svg viewBox="0 0 360 270">
+  ${defs}
+  <line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="#777" stroke-width="1.2" marker-end="url(#axisArrowR)"/>
+  <line x1="${pad}" y1="${H-pad}" x2="${pad}" y2="${pad}" stroke="#777" stroke-width="1.2" marker-end="url(#axisArrowR)"/>
+  <text x="${W-pad-2}" y="${H-pad+20}" font-size="12">Y＋</text>
+  <text x="${pad-14}" y="${pad-7}" font-size="12">X＋</text>
   <line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="#777" stroke-width="1.5"/>
   <line x1="${A.x}" y1="${A.y}" x2="${Q.x}" y2="${Q.y}" stroke="#17324d" stroke-width="2.5"/>
   <polyline points="${arc.join(' ')}" fill="none" stroke="#b45309" stroke-width="1.8"/>
@@ -325,7 +339,7 @@ function renderTravSummary(){
         box.innerHTML='';
         return;
       }
-      box.innerHTML='<h3>計算結果</h3><div class="table-wrap"><table><thead><tr><th>点名</th><th>X</th><th>Y</th><th>内角</th><th>方向角</th></tr></thead><tbody>'+
+      box.innerHTML='<h3>計算結果</h3><div class="table-wrap"><table><thead><tr><th>点名</th><th>X</th><th>Y</th><th>夾角</th><th>方向角</th></tr></thead><tbody>'+
         trav.map(v=>'<tr><td>'+v.p+'</td><td>'+fmt(v.x)+'</td><td>'+fmt(v.y)+'</td><td>'+((v.ang!=null)?v.ang:'—')+'</td><td>'+((v.dir!=null)?degstr(v.dir):'—')+'</td></tr>').join('')+
         '</tbody></table></div>';
     }
@@ -376,7 +390,7 @@ function addContinuousForm(){
   card.className='radial-form card';
   card.innerHTML=`<h2>${p}を計算</h2>
   <p class="hint">${stationName}を器械点、${backsightName}を後視点として、後視点→器械点→計算点の角（右回り・時計回り）と距離から${p}を計算します。</p>
-  <div class="grid"><label>角度（右回り＋）<input class="ca2" placeholder="90.0556"></label><label>距離(m)<input class="cd2" type="number" step="any"></label></div>
+  <div class="grid"><label>夾角（右回り）<input class="ca2" placeholder="90.0556"></label><label>距離(m)<input class="cd2" type="number" step="any"></label></div>
   <p class="hint">入力例：90°5′56″ → <b>90.0556</b></p>
   <button type="button" class="calc ccalc">${p}を計算</button>
   <button type="button" class="calc crecalc" style="display:none">${p}を再計算</button>
@@ -431,7 +445,7 @@ function calcContinuousForm(card, cascade=true){
 
   // 後視方向 → 右回り（時計回り）の内角
   const base=(Math.atan2(bs.y-st.y,bs.x-st.x)*180/Math.PI+360)%360;
-  const dir=(base-turn+360)%360;
+  const dir=(base+turn)%360;
   const r=dir*Math.PI/180;
   const x=st.x+d*Math.cos(r);
   const y=st.y+d*Math.sin(r);
@@ -522,40 +536,47 @@ function drawContinuousFigure(){
   if(pts.length<2) return;
 
   const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y);
-  let minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
-  const pad=45, w=700, h=420;
+  const minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
+  // 枠内に確実に収めるため、余白を十分に取った固定viewBoxに自動縮尺で描画
+  const w=560, h=360, pad=62;
   const dx=maxX-minX || 1, dy=maxY-minY || 1;
-  const scale=Math.min((w-2*pad)/dx,(h-2*pad)/dy);
-  const sx=x=>pad+(x-minX)*scale;
-  const sy=y=>h-(pad+(y-minY)*scale);
+  const scale=Math.min((w-2*pad)/dy,(h-2*pad)/dx);
+  const sx=y=>pad+(y-minY)*scale;
+  const sy=x=>h-pad-(x-minX)*scale;
 
-  let out='';
+  let out='<defs><marker id="axisArrowC" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#555"/></marker></defs>';
+
+  // 座標方向表示（X+は上、Y+は右）
+  const ax=78, ay=70;
+  out+='<line x1="'+ax+'" y1="'+(ay+28)+'" x2="'+ax+'" y2="'+ay+'" stroke="#555" stroke-width="1.5" marker-end="url(#axisArrowC)"/>';
+  out+='<line x1="'+ax+'" y1="'+(ay+28)+'" x2="'+(ax+38)+'" y2="'+(ay+28)+'" stroke="#555" stroke-width="1.5" marker-end="url(#axisArrowC)"/>';
+  out+='<text x="'+(ax-12)+'" y="'+(ay-5)+'" font-size="13">X＋</text>';
+  out+='<text x="'+(ax+43)+'" y="'+(ay+33)+'" font-size="13">Y＋</text>';
 
   // P2→P1→P3→P4→P5…の順に結ぶ。
   const ordered=[];
-  const firstNames=['P2','P1'];
-  for(const name of firstNames){
-    const p=pts.find(v=>v.p===name);
-    if(p) ordered.push(p);
+  for(const name of ['P2','P1']){
+    const q=pts.find(v=>v.p===name);
+    if(q) ordered.push(q);
   }
-  const later=pts
-    .filter(p=>/^P\d+$/.test(p.p) && parseInt(p.p.slice(1),10)>=3)
+  const later=pts.filter(p=>/^P\d+$/.test(p.p)&&parseInt(p.p.slice(1),10)>=3)
     .sort((a,b)=>parseInt(a.p.slice(1),10)-parseInt(b.p.slice(1),10));
   ordered.push(...later);
 
   for(let i=1;i<ordered.length;i++){
     const a=ordered[i-1], b=ordered[i];
-    out+='<line x1="'+sx(a.x)+'" y1="'+sy(a.y)+'" x2="'+sx(b.x)+'" y2="'+sy(b.y)+'" stroke="#333" stroke-width="2"/>';
+    out+='<line x1="'+sx(a.y)+'" y1="'+sy(a.x)+'" x2="'+sx(b.y)+'" y2="'+sy(b.x)+'" stroke="#333" stroke-width="2"/>';
   }
 
-  for(const p of pts){
-    const cx=sx(p.x), cy=sy(p.y);
-    out+='<circle cx="'+cx+'" cy="'+cy+'" r="5" fill="#fff" stroke="#000" stroke-width="2"/>';
-    out+='<text x="'+(cx+8)+'" y="'+(cy-8)+'" font-size="14" fill="#000">'+p.p+'</text>';
+  for(const q of pts){
+    const cx=sx(q.y), cy=sy(q.x);
+    out+='<circle cx="'+cx+'" cy="'+cy+'" r="4" fill="#fff" stroke="#000" stroke-width="1.7"/>';
+    out+='<text x="'+(cx+7)+'" y="'+(cy-7)+'" font-size="13" fill="#000">'+q.p+'</text>';
   }
+  svg.setAttribute('viewBox','0 0 '+w+' '+h);
+  svg.setAttribute('preserveAspectRatio','xMidYMid meet');
   svg.innerHTML=out;
 }
-
 function renderContinuousSummary(){
   const box=$('continuousSummary');
   if(!box) return;
@@ -574,7 +595,7 @@ function renderContinuousSummary(){
   box.innerHTML=
     '<h3>連続トラバース結果</h3>'+
     '<div class="table-wrap"><table><thead><tr>'+
-    '<th>点</th><th>区分</th><th>X</th><th>Y</th><th>内角</th><th>距離</th><th>方向角</th>'+
+    '<th>点</th><th>区分</th><th>X</th><th>Y</th><th>夾角</th><th>距離</th><th>方向角</th>'+
     '</tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<div class="trav-figure-wrap">'+
     '<h3>連続トラバース図（P2→P1→P3→P4…）</h3>'+
