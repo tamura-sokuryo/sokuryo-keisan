@@ -143,10 +143,10 @@ function calcPerpPoint(id){
       hx=ax+t*vx,hy=ay+t*vy;
   let d=Math.hypot(px-hx,py-hy),
       ah=Math.hypot(hx-ax,hy-ay),
-      bh=Math.hypot(hx-bx,hy-by),
-      // 測量座標の図では、横軸がY（＋右）、縦軸がX（＋上）。
-  // したがって A→B の左右は、(Y,X) の通常の2次元外積で判定する。
-  // sideCross > 0：A→Bを向いて左、sideCross < 0：右。
+      bh=Math.hypot(hx-bx,hy-by);
+
+  // 測量座標の図では、横軸がY（＋右）、縦軸がX（＋上）。
+  // A→Bを向いて左側なら「左」、右側なら「右」とする。
   const sideCross=(by-ay)*(px-ax)-(bx-ax)*(py-ay);
   let sideText=Math.abs(sideCross)<1e-12?'基準線上':(sideCross>0?'左':'右');
 
