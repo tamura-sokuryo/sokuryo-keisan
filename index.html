@@ -146,10 +146,9 @@ function calcPerpPoint(id){
       bh=Math.hypot(hx-bx,hy-by),
       cross=vx*(py-ay)-vy*(px-ax);
 
-  // 測量座標は X+ が上、Y+ が右。
-  // A→B に対する左右は、測量座標系に合わせて cross の符号を反転して判定する。
-  let sideCross=-cross;
-  let sideText=Math.abs(sideCross)<1e-12?'基準線上':(sideCross>0?'左':'右');
+  // A→Bを進行方向として、あさかぜネットの左右表示に合わせる。
+  // この判定では cross>0 を左、cross<0 を右とする。
+  let sideText=Math.abs(cross)<1e-12?'基準線上':(cross>0?'左':'右');
 
   // ─────────────────────────────────────────────
   // 垂線図：V36までの「H周辺を拡大」の考え方を維持しつつ、
