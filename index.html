@@ -54,7 +54,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:7px;borde
 
 <section id="trav" class="panel">
 <div class="card"><h2>トラバース放射</h2>
-<p class="hint">P1を器械点、P2を後視点として固定します。P1からP2を後視し、P1を中心に後視方向からの「内角」と「距離」からP3、P4、P5…を放射状に求めます。追加する点でも<strong>器械点P1・後視点P2は変わりません</strong>。閉合計算・補正は行いません。</p>
+<p class="hint">P1を器械点、P2を後視点として固定します。P1からP2を後視し、P1を中心に後視方向からの「夾角」と「距離」からP3、P4、P5…を放射状に求めます。追加する点でも<strong>器械点P1・後視点P2は変わりません</strong>。閉合計算・補正は行いません。</p>
 <div class="grid">
 <label>P1（器械点）X<input id="tx1" type="number" step="any"></label><label>P1（器械点）Y<input id="ty1" type="number" step="any"></label>
 <label>P2（後視）X<input id="tx2" type="number" step="any"></label><label>P2（後視）Y<input id="ty2" type="number" step="any"></label>
@@ -145,7 +145,7 @@ function calcPerpPoint(id){
       ah=Math.hypot(hx-ax,hy-ay),
       bh=Math.hypot(hx-bx,hy-by),
       cross=vx*(py-ay)-vy*(px-ax);
-  let sideText=Math.abs(cross)<1e-12?'基準線上':(cross>0?'左':'右');
+  let sideText=Math.abs(cross)<1e-12?'基準線上':(cross>0?'右':'左');
 
   // HがAB線分の外にある場合も、図はHを中心に拡大して表示する。
   // A・Bの実位置が画面外になる場合は、A/Bと省略記号で「一部省略」を明示する。
