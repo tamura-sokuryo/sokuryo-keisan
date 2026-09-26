@@ -104,7 +104,43 @@ function dimHtml(x){return `<span class="num3">${dim3(x)}</span><span class="num
 function svgDim(x){return `<tspan fill="#c40000" font-size="12" font-weight="700">${dim3(x)} m</tspan><tspan fill="#222" font-size="8" dx="3">(${fmt(x)})</tspan>`}
 function angle(s){if(typeof s==='number')s=String(s);s=String(s).trim();if(!s)return NaN; if(/[°′'″"]/.test(s)){let m=s.match(/([\d.]+)\s*°?\s*(?:([\d.]+)\s*[′']?)?\s*(?:([\d.]+)\s*[″"]?)?/);if(m){let D=+m[1],M=+(m[2]||0),S=+(m[3]||0);if(M>=60||S>=60)return NaN;return D+M/60+S/3600}} let v=parseFloat(s);if(!Number.isFinite(v))return NaN; if(s.includes('.')){let parts=s.split('.');let D=+parts[0];let packed=(parts[1]||'').padEnd(4,'0').slice(0,4);let M=+(packed.slice(0,2)||0),S=+(packed.slice(2,4)||0);if(M>=60||S>=60)return NaN;return D+M/60+S/3600} return v}
 function degstr(d){d=((d%360)+360)%360;let D=Math.floor(d),m=(d-D)*60,M=Math.floor(m),S=(m-M)*60;return `${D}°${String(M).padStart(2,'0')}′${S.toFixed(2).padStart(5,'0')}″`}
-function distance(){let x=n('dx2')-n('dx1'),y=n('dy2')-n('dy1'),r=Math.hypot(x,y),a=Math.atan2(y,x)*180/Math.PI; a=(a+360)%360; $('dres').innerHTML=`<div class=result>ΔX ${coordHtml(x)}　ΔY ${coordHtml(y)}<br><span class=big>${dimHtml(r)} m</span><br>方向角　${degstr(a)}</div><div class="sketch"><svg viewBox="0 0 360 210"><line x1="45" y1="170" x2="315" y2="170" stroke="#aaa"/><line x1="45" y1="170" x2="315" y2="55" stroke="#17324d" stroke-width="3"/><circle cx="45" cy="170" r="6" fill="#17324d"/><circle cx="315" cy="55" r="6" fill="#17324d"/><text x="30" y="195">P1</text><text x="320" y="55">P2</text><text x="145" y="95">${svgDim(r)}</text></svg></div>`}
+function distance(){
+  const x1=n('dx1'), y1=n('dy1'), x2=n('dx2'), y2=n('dy2');
+  const dx=x2-x1, dy=y2-y1, r=Math.hypot(dx,dy);
+  let a=Math.atan2(dy,dx)*180/Math.PI; a=(a+360)%360;
+
+  const W=420,H=280,pad=54;
+  const xs=[x1,x2], ys=[y1,y2];
+  const minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
+  const spanX=maxX-minX || 1, spanY=maxY-minY || 1;
+  const scale=Math.min((W-2*pad)/spanY,(H-2*pad)/spanX);
+  const sx=y=>pad+(y-minY)*scale;
+  const sy=x=>H-pad-(x-minX)*scale;
+  const P1={x:sx(y1),y:sy(x1)}, P2={x:sx(y2),y:sy(x2)};
+
+  // 測量座標系：縦＝X（X＋は上）、横＝Y（Y＋は右）。
+  // 実座標の方向関係をそのまま図へ反映する。
+  const dxs=P2.x-P1.x, dys=P2.y-P1.y, L=Math.hypot(dxs,dys)||1;
+  const nx=-dys/L*16, ny=dxs/L*16;
+  const mx=(P1.x+P2.x)/2, my=(P1.y+P2.y)/2;
+  const tx=Math.max(12,Math.min(W-90,mx+nx+4));
+  const ty=Math.max(22,Math.min(H-18,my+ny-2));
+
+  const defs=`<defs><marker id="axisArrowD" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#555"/></marker></defs>`;
+  const ax=66, ay=58;
+  const axis=`<line x1="${ax}" y1="${ay+30}" x2="${ax}" y2="${ay}" stroke="#666" stroke-width="1.5" marker-end="url(#axisArrowD)"/><line x1="${ax}" y1="${ay+30}" x2="${ax+42}" y2="${ay+30}" stroke="#666" stroke-width="1.5" marker-end="url(#axisArrowD)"/><text x="${ax-12}" y="${ay-6}" font-size="12">X＋</text><text x="${ax+46}" y="${ay+35}" font-size="12">Y＋</text>`;
+
+  $('dres').innerHTML=`<div class=result>ΔX ${coordHtml(dx)}　ΔY ${coordHtml(dy)}<br><span class=big>${dimHtml(r)} m</span><br>方向角　${degstr(a)}</div>
+  <div class="sketch"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+    ${defs}${axis}
+    <line x1="${P1.x}" y1="${P1.y}" x2="${P2.x}" y2="${P2.y}" stroke="#17324d" stroke-width="3"/>
+    <line x1="${P1.x+nx}" y1="${P1.y+ny}" x2="${P2.x+nx}" y2="${P2.y+ny}" stroke="#999" stroke-width="1"/>
+    <text x="${tx}" y="${ty}">${svgDim(r)}</text>
+    <circle cx="${P1.x}" cy="${P1.y}" r="6" fill="#17324d"/><circle cx="${P2.x}" cy="${P2.y}" r="6" fill="#17324d"/>
+    <text x="${P1.x+8}" y="${P1.y-8}" font-size="14" font-weight="700" fill="#17324d">P1</text>
+    <text x="${P2.x+8}" y="${P2.y-8}" font-size="14" font-weight="700" fill="#17324d">P2</text>
+  </svg></div>`
+}
 let perpBase=null, perpCount=0;
 
 function startPerp(){
